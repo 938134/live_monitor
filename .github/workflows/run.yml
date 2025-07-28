@@ -1,0 +1,41 @@
+name: Live-Monitor
+
+on:
+  # 手动触发
+  workflow_dispatch:
+  # 每天 04:00 UTC 跑一次
+  schedule:
+    - cron: '0 4 * * *'
+  # 当 urls/ 或 scripts/ 变更也跑一次
+  push:
+    paths:
+      - 'urls/**'
+      - 'scripts/**'
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Run monitor
+        run: python scripts/main.py
+
+      - name: Commit results
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/
+          git diff --cached --quiet || (git commit -m "Auto update live results" && git push)
