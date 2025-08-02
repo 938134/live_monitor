@@ -28,7 +28,7 @@ def _check_rtmp(url):
             ["ffmpeg", "-i", url, "-t", "3", "-f", "null", "-"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
-            timeout=5,
+            timeout=FF_TIMEOUT,
         )
         print("FFmpeg stderr:", result.stderr.decode())
         return "Stream #0:" in result.stderr.decode()
