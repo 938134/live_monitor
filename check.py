@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """
 check.py
-1. 只处理 pt.json 中 result=1 的平台
-2. 去重频道 url
-3. 快速检测
+1. 只取 pt.json 中 result=1 的平台
+2. URL 去重
+3. 区分 rtmp / 非 rtmp 检测
 """
 
 import json, logging, subprocess, time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from datetime import datetime, timedelta
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 log = logging.info
@@ -17,31 +16,50 @@ log = logging.info
 PT_FILE   = "pt.json"
 CH_FILE   = "ch.json"
 WORKERS   = 80
-FF_TIMEOUT = 0.5
+FF_TIMEOUT = 3               # ffmpeg -t 秒数
 
 def load(path):
     return json.loads(Path(path).read_text(encoding="utf-8")) if Path(path).exists() else []
 
-def check_one(ch):
-    url = ch["address"]
-    if url.endswith(".mp4"):
-        return ch
+def _check_rtmp(url):
     try:
-        subprocess.run(
+        result = subprocess.run(
             ["ffmpeg", "-i", url, "-t", str(FF_TIMEOUT), "-f", "null", "-"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
-            timeout=5,
+            timeout=FF_TIMEOUT + 2,
         )
-        return ch
+        return "Stream #0:" in result.stderr.decode("utf-8", errors="ignore")
     except Exception:
-        return None
+        return False
+
+def _check_other(url):
+    try:
+        import ffmpeg
+        probe = ffmpeg.probe(url, timeout=FF_TIMEOUT)
+        return "streams" in probe and len(probe["streams"]) > 0
+    except Exception:
+        return False
+
+def check_one(channel):
+    url = channel["address"]
+    name = channel.get("title", "unknown")
+    if url.endswith(".mp4"):
+        log(f"[KEEP] 录像 {name} {url}")
+        return channel
+    if url.startswith("rtmp://"):
+        ok = _check_rtmp(url)
+    else:
+        ok = _check_other(url)
+    status = "✅ 在线" if ok else "❌ 离线"
+    log(f"{status} {name} {url}")
+    return channel if ok else None
 
 def main():
     start = time.time()
     pt = load(PT_FILE)
 
-    # 1. 只取 result=1 的平台
+    # 1. result=1 且去重
     channels = []
     seen = set()
     for src in pt:
@@ -54,14 +72,12 @@ def main():
                     seen.add(url)
                     channels.append(ch)
 
-    # 2. 检测
+    # 2. 并发检测
     live = []
     with ThreadPoolExecutor(max_workers=WORKERS) as ex:
-        for idx, res in enumerate(ex.map(check_one, channels)):
-            if idx % 500 == 0:
-                log(f"[CHECK] {idx}/{len(channels)}")
-            if res:
-                live.append(res)
+        for ch in ex.map(check_one, channels):
+            if ch:
+                live.append(ch)
 
     Path(CH_FILE).write_text(json.dumps(live, ensure_ascii=False, indent=2))
     log(f"[CHECK] 在线 {len(live)}/{len(channels)}，耗时 {time.time()-start:.2f}s")
