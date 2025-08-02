@@ -1,41 +1,51 @@
-name: Live-Monitor
+name: Build and Release
 
 on:
-  # 手动触发
-  workflow_dispatch:
-  # 每天 04:00 UTC 跑一次
-  schedule:
-    - cron: '0 4 * * *'
-  # 当 urls/ 或 scripts/ 变更也跑一次
   push:
-    paths:
-      - 'urls/**'
-      - 'scripts/**'
+    tags:
+      - 'v*'
 
 jobs:
-  run:
-    runs-on: ubuntu-latest
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
 
-      - name: Install deps
-        run: pip install -r requirements.txt
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
 
-      - name: Install ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+    - name: Install PyInstaller
+      run: pip install pyinstaller
 
-      - name: Run monitor
-        run: python scripts/main.py
+    - name: Build executable
+      run: |
+        pyinstaller --onefile main.py --name iptv-checker
 
-      - name: Commit results
-        run: |
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add data/
-          git diff --cached --quiet || (git commit -m "Auto update live results" && git push)
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: iptv-checker-${{ matrix.os }}
+        path: dist/iptv-checker*
+
+    - name: Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v2
+      with:
+        files: dist/iptv-checker*
+        tag_name: ${{ github.ref_name }}
+        name: Release ${{ github.ref_name }}
+        body: |
+          自动构建版本，支持平台：Windows、Linux、macOS
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

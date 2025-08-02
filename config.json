@@ -1,0 +1,39 @@
+{
+    "files": {
+      "pt_data": "pt.json",
+      "ch_data": "ch.json"
+    },
+    "timeout": {
+      "web_request": 3,
+      "stream_check": 3,
+      "update_threshold": 20
+    },
+    "concurrency": {
+      "max": 10,
+      "channel_check_multiplier": 3
+    },
+    "url": {
+      "suffix": "json.txt",
+      "default": [
+        "http://api.hclyz.com:81/mf/",
+        "http://api.vipmisss.com:81/xcdsw/",
+        "https://api8.me/api/"
+      ],
+      "ignore": [
+        "jsonweishizhibo.txt",
+        "jsonlongzhu.txt",
+        "jsonoumeiFEATURED.txt"
+      ]
+    },
+    "keys": {
+      "platform": "pingtai",
+      "channel": "zhubo",
+      "pep": "pep",
+      "result": "result",
+      "address": "address",
+      "name": "title",
+      "url_suffix": "json.txt",
+      "urls": "urls",
+      "ignore_urls": "ignore_urls"
+    }
+  }
