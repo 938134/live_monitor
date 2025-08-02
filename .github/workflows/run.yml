@@ -8,24 +8,10 @@ on:
 jobs:
   fetch-and-check:
     runs-on: ubuntu-latest
+    container:
+      image: ghcr.io/${{ github.repository }}/ffmpeg-py:latest   # 👈 用我们自己的镜像
     steps:
       - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install Python deps
-        run: |
-          pip install httpx ffmpeg-python
-
-      # 直接安装，不再尝试缓存
-      - name: Install FFmpeg
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y ffmpeg
-
       - run: python fetch.py
       - run: python check.py
 
