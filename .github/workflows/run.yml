@@ -1,32 +1,39 @@
-name: Update Channels
+name: Split Fetch & Check
 
 on:
   schedule:
-    - cron: '*/10 * * * *'   # 每 10 分钟
+    - cron: '*/10 * * * *'
   workflow_dispatch:
 
 jobs:
-  update:
+  fetch:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: pip install httpx
+      - run: python fetch.py
+      - uses: actions/upload-artifact@v4
         with:
-          python-version: '3.11'
+          name: pt
+          path: pt.json
 
-      - name: Install deps
+  check:
+    needs: fetch
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: pt }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.11' }
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: python check.py
+      - name: commit
         run: |
-          sudo apt-get update && sudo apt-get install -y ffmpeg
-          pip install -r requirements.txt
-
-      - name: Run checker
-        run: python main.py
-
-      - name: Commit results
-        run: |
-          git config user.name  "github-actions[bot]"
+          git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add pt.json ch.json
-          git diff --quiet && git diff --staged --quiet || git commit -m "Auto update $(date -u)"
+          git add ch.json
+          git diff --quiet || git commit -m "Auto live channels $(date -u)"
           git push
