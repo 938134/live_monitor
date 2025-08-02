@@ -44,21 +44,33 @@ async def update_platforms(pt):
         tasks = [update_one(sem, session, p) for p in pt]
         await asyncio.gather(*tasks)
 
-async def update_one(sem, session, p):
+async def update_one(sem, session, src):
     async with sem:
-        url = p[KEYS["address"]] + CFG["url"]["suffix"]
-        data = await fetch(session, url)
+        # 1) 拉取平台索引
+        index_url = src[KEYS["address"]] + CFG["url"]["suffix"]
+        data = await fetch(session, index_url)
         if not data:
-            p[KEYS["result"]] = 0
+            src[KEYS["result"]] = 0
             return
-        for pf in data.get(KEYS["platform"], []):
-            pf[KEYS["channel"]] = [
-                ch for ch in pf.get(KEYS["channel"], [])
-                if ch.get(KEYS["address"]) and ch[KEYS["address"]] not in IGNORE
+        platforms = data.get(KEYS["platform"], [])
+        src[KEYS["platform"]] = platforms
+        src[KEYS["result"]] = 1
+
+        # 2) 拉取每个平台的频道
+        for pf in platforms:
+            channel_url = src[KEYS["address"]] + pf[KEYS["address"]]
+            ch_data = await fetch(session, channel_url)
+            if not ch_data:
+                pf[KEYS["result"]] = 0
+                continue
+            channels = ch_data.get(KEYS["channel"], [])
+            # 过滤 ignore 列表
+            channels = [
+                c for c in channels
+                if c.get(KEYS["address"]) and c[KEYS["address"]] not in IGNORE
             ]
-        p[KEYS["platform"]] = data.get(KEYS["platform"], [])
-        p[KEYS["result"]] = 1
-        log(f"✅ {url}")
+            pf[KEYS["channel"]] = channels
+            pf[KEYS["result"]] = 1
 
 # ---------- 频道可用检测 ----------
 def check_stream(url: str, timeout: int = 5) -> bool:
