@@ -16,19 +16,12 @@ jobs:
           python-version: '3.11'
           cache: 'pip'
 
-      - name: Install all deps
+      - name: Install Python deps
         run: |
           pip install httpx ffmpeg-python
 
-      - name: Cache FFmpeg
-        uses: actions/cache@v4
-        id: cache-ffmpeg
-        with:
-          path: /usr/bin/ffmpeg
-          key: ${{ runner.os }}-ffmpeg
-
-      - name: Install FFmpeg (if not cached)
-        if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
+      # 直接安装，不再尝试缓存
+      - name: Install FFmpeg
         run: |
           sudo apt-get update
           sudo apt-get install -y ffmpeg
