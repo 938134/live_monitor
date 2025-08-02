@@ -15,8 +15,8 @@ log = logging.info
 
 PT_FILE   = "pt.json"
 CH_FILE   = "ch.json"
-WORKERS   = 80
-FF_TIMEOUT = 3               # ffmpeg -t 秒数
+WORKERS   = 40
+FF_TIMEOUT = 5               # ffmpeg -t 秒数
 
 def load(path):
     return json.loads(Path(path).read_text(encoding="utf-8")) if Path(path).exists() else []
@@ -28,7 +28,7 @@ def _check_rtmp(url):
             ["ffmpeg", "-i", url, "-t", "3", "-f", "null", "-"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
-            timeout=FF_TIMEOUT,
+            timeout=2*FF_TIMEOUT,
         )
         print("FFmpeg stderr:", result.stderr.decode())
         return "Stream #0:" in result.stderr.decode()
@@ -41,7 +41,6 @@ def _check_other(url):
         probe = ffmpeg.probe(url, timeout=FF_TIMEOUT)
         return "streams" in probe and len(probe["streams"]) > 0
     except Exception as e:
-        print("_check_other error:", e)
         return False
 
 def check_one(channel):
