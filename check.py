@@ -41,7 +41,8 @@ def _check_other(url):
         import ffmpeg
         probe = ffmpeg.probe(url, timeout=FF_TIMEOUT)
         return "streams" in probe and len(probe["streams"]) > 0
-    except Exception:
+    except Exception as e:
+        print("_check_other error:", e)
         return False
 
 def check_one(channel):
