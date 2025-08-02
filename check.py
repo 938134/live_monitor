@@ -33,7 +33,6 @@ def _check_rtmp(url):
         print("FFmpeg stderr:", result.stderr.decode())
         return "Stream #0:" in result.stderr.decode()
     except Exception as e:
-        print("_check_rtmp error:", e)
         return False
 
 def _check_other(url):

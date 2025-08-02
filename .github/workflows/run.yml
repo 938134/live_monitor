@@ -18,7 +18,7 @@ jobs:
           cache: 'pip'  # 缓存 pip 依赖
 
       - name: Install dependencies
-        run: pip install httpx
+        run: pip install ffmpeg-python httpx
 
       - run: python fetch.py
 
