@@ -19,8 +19,11 @@ MAX_CONN  = CFG["concurrency"]["max"]
 def log(msg): logging.info(msg)
 def save(path, data): Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=2))
 def load(path):
-    return json.loads(Path(path).read_text(encoding="utf-8")) if Path(path).exists() else []
-
+    try:
+        text = Path(path).read_text(encoding="utf-8").strip()
+        return json.loads(text) if text else []
+    except Exception:
+        return []
 # ---------- 更新 ----------
 async def fetch(session, url):
     try:
