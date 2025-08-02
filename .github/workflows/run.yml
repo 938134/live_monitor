@@ -1,9 +1,9 @@
 name: Build and Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
+  schedule:
+    - cron: "0 22 * * *"
 
 jobs:
   build:
