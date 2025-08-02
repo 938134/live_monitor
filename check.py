@@ -30,7 +30,7 @@ def _check_rtmp(url):
             stderr=subprocess.PIPE,
             timeout=2*FF_TIMEOUT,
         )
-        print("FFmpeg stderr:", result.stderr.decode())
+        #print("FFmpeg stderr:", result.stderr.decode())
         return "Stream #0:" in result.stderr.decode()
     except Exception as e:
         return False
