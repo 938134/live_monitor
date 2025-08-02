@@ -1,58 +1,32 @@
-name: Check Live Channels
+name: Update Channels
 
 on:
-  # 1) 每 10 分钟定时
   schedule:
-    - cron: '*/10 * * * *'
-
-  # 2) 手动触发
+    - cron: '*/10 * * * *'   # 每 10 分钟
   workflow_dispatch:
 
-  # 3) 推送 tag 时触发 Release
-  push:
-    tags:
-      - 'v*'
-
 jobs:
-  check:
+  update:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
 
-      - name: Install system & pip deps
+      - name: Install deps
         run: |
-          sudo apt update && sudo apt install -y ffmpeg
-          pip install aiohttp
+          sudo apt-get update && sudo apt-get install -y ffmpeg
+          pip install -r requirements.txt
 
       - name: Run checker
         run: python main.py
 
-      # 非 tag：直接把结果提交回仓库
-      - name: Commit & push live_channels.json (cron/manual)
-        if: github.ref_type != 'tag'
+      - name: Commit results
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add live_channels.json
-          git diff --quiet && git diff --staged --quiet || git commit -m "Auto update live_channels.json - $(date -u)"
+          git add pt.json ch.json
+          git diff --quiet && git diff --staged --quiet || git commit -m "Auto update $(date -u)"
           git push
-
-      # tag：发布 Release
-      - name: Release
-        if: github.ref_type == 'tag'
-        uses: softprops/action-gh-release@v2
-        with:
-          files: live_channels.json
-          tag_name: ${{ github.ref_name }}
-          name: Live Channels ${{ github.ref_name }}
-          body: |
-            每 10 分钟自动检测的 IPTV 频道列表（tag 版本）。
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
