@@ -15,22 +15,25 @@ log = logging.info
 
 PT_FILE   = "pt.json"
 CH_FILE   = "ch.json"
-WORKERS   = 20
+WORKERS   = 80
 FF_TIMEOUT = 3               # ffmpeg -t 秒数
 
 def load(path):
     return json.loads(Path(path).read_text(encoding="utf-8")) if Path(path).exists() else []
 
+# 临时把 stderr 输出到日志
 def _check_rtmp(url):
     try:
         result = subprocess.run(
-            ["ffmpeg", "-i", url, "-t", str(FF_TIMEOUT), "-f", "null", "-"],
+            ["ffmpeg", "-i", url, "-t", "3", "-f", "null", "-"],
             stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            timeout=FF_TIMEOUT + 2,
+            stderr=subprocess.PIPE,
+            timeout=5,
         )
-        return "Stream #0:" in result.stderr.decode("utf-8", errors="ignore")
-    except Exception:
+        print("FFmpeg stderr:", result.stderr.decode())
+        return "Stream #0:" in result.stderr.decode()
+    except Exception as e:
+        print("_check_rtmp error:", e)
         return False
 
 def _check_other(url):
