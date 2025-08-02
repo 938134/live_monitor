@@ -1,5 +1,4 @@
 name: fetch and check
-
 on:
   schedule:
     - cron: '*/10 * * * *'
@@ -9,17 +8,12 @@ jobs:
   fetch-and-check:
     runs-on: ubuntu-latest
     container:
-      image: ghcr.io/${{ github.repository }}/ffmpeg-py:latest   # 👈 用我们自己的镜像
+      image: ghcr.io/${{ github.repository }}/ffmpeg-py:latest
     steps:
       - uses: actions/checkout@v4
       - run: python fetch.py
-      - run: python check.py
-
-      - name: Upload ch.json to release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if ! gh release view latest >/dev/null 2>&1; then
-            gh release create latest --title "Auto live channels" --notes "Automatically updated live channels"
-          fi
-          gh release upload latest ch.json --clobber
+      - run: python check.py          # 生成 /app/ch.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ch-json
+          path: ch.json               # 容器内路径
