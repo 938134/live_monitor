@@ -15,7 +15,7 @@ log = logging.info
 
 PT_FILE   = "pt.json"
 CH_FILE   = "ch.json"
-WORKERS   = 80
+WORKERS   = 20
 FF_TIMEOUT = 3               # ffmpeg -t 秒数
 
 def load(path):
