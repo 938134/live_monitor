@@ -10,10 +10,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.11' }
-      - run: pip install httpx
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'  # 缓存 pip 依赖
+
+      - name: Install dependencies
+        run: pip install httpx
+
       - run: python fetch.py
+
       - uses: actions/upload-artifact@v4
         with:
           name: pt
@@ -24,13 +32,33 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/download-artifact@v4
-        with: { name: pt }
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.11' }
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+        with:
+          name: pt
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Cache FFmpeg
+        uses: actions/cache@v4
+        id: cache-ffmpeg
+        with:
+          path: /usr/bin/ffmpeg
+          key: ${{ runner.os }}-ffmpeg
+
+      - name: Install FFmpeg (if not cached)
+        if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
       - run: python check.py
-      - name: commit
+
+      - name: Commit changes
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
