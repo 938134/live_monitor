@@ -12,8 +12,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: python fetch.py
-      - run: python check.py          # 生成 /app/ch.json
-      - uses: actions/upload-artifact@v4
-        with:
-          name: ch-json
-          path: ch.json               # 容器内路径
+      - run: python check.py
+
+      - name: Commit & push ch.json
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add ch.json
+          git diff --quiet && git diff --staged --quiet || git commit -m "Auto-update ch.json"
+          git push
