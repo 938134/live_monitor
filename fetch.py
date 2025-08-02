@@ -1,5 +1,15 @@
 #!/usr/bin/env python3
+"""
+fetch_channels.py
+一步完成：
+1. 拉平台索引
+2. 拉每个平台对应的频道列表
+3. 6 小时过期检查
+输出 pt.json
+"""
+
 import asyncio, httpx, json, logging, time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
@@ -7,27 +17,29 @@ log = logging.info
 
 CFG = json.loads(Path("config.json").read_text())
 URLS    = CFG["url"]["default"]
+SUFFIX  = CFG["url"]["suffix"]
 IGNORE  = set(CFG["url"]["ignore"])
 KEYS    = CFG["keys"]
-SUFFIX  = CFG["url"]["suffix"]
 PT_FILE = CFG["files"]["pt_data"]
+TIMEOUT = CFG["timeout"]["web_request"]
+MAX_CONN = CFG["concurrency"]["max"]
+EXPIRE_H   = CFG["timeout"]["update_threshold"]
 
-# -------- 可调参数 --------
-MAX_CONN   = 10          # 降低并发
-POOL_LIMIT = 20          # 连接池上限
-TIMEOUT    = 3           # 单请求超时
-HEADERS    = {"User-Agent": "live-monitor/1.0"}
-
-# 忽略平台黑名单
-BLACKLIST_PLATFORM = {
-    "jsonlongzhu.txt", "jsonyingke.txt",
-    "jsonoumeiFEATURED.txt", "jsonoumeiFEMALE.txt",
-    "jsonoumeiMALE.txt", "jsonoumeiCOUPLE.txt", "jsonoumeiTRANS.txt"
-}
+def is_expired(last_mod: str) -> bool:
+    if not last_mod:
+        return True
+    try:
+        mod = datetime.strptime(last_mod, "%a, %d %b %Y %H:%M:%S %Z").replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) - mod > timedelta(hours=EXPIRE_H)
+    except Exception:
+        return True
 
 async def fetch(session, url):
     try:
         r = await session.get(url, timeout=TIMEOUT)
+        last = r.headers.get("Last-Modified", "")
+        if is_expired(last):
+            return None
         return r.json()
     except Exception as e:
         log(f"❌ {url} {e}")
@@ -43,11 +55,10 @@ async def update_source(session, src_url):
     tasks = []
     for pf in platforms:
         addr = pf.get(KEYS["address"])
-        if addr in IGNORE or addr in BLACKLIST_PLATFORM:
+        if addr in IGNORE:
             continue
         ch_url = src_url + addr
         tasks.append(fetch(session, ch_url))
-        pf[KEYS["channel"]] = []  # 先占位
 
     # 并发拉频道
     ch_results = await asyncio.gather(*tasks)
@@ -61,13 +72,12 @@ async def update_source(session, src_url):
 
 async def main():
     start = time.time()
-    limits = httpx.Limits(max_keepalive_connections=POOL_LIMIT, max_connections=POOL_LIMIT)
-    async with httpx.AsyncClient(limits=limits, headers=HEADERS) as client:
+    async with httpx.AsyncClient() as client:
         sem = asyncio.Semaphore(MAX_CONN)
         tasks = [update_source(client, u) for u in URLS]
-        results = await asyncio.gather(*tasks)
-    Path(PT_FILE).write_text(json.dumps(results, ensure_ascii=False, indent=2))
-    log(f"[FETCH] done {len(results)} sources in {time.time()-start:.2f}s")
+        pt_list = await asyncio.gather(*tasks)
+    Path(PT_FILE).write_text(json.dumps(pt_list, ensure_ascii=False, indent=2))
+    log(f"[FETCH] done {len(pt_list)} sources, {time.time()-start:.2f}s")
 
 if __name__ == "__main__":
     asyncio.run(main())

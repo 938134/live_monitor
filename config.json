@@ -15,7 +15,6 @@
     "platform": "pingtai",
     "channel": "zhubo",
     "result": "result",
-    "address": "address",
-    "name": "title"
+    "address": "address"
   }
 }
