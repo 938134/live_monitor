@@ -56,13 +56,17 @@ async def update_source(session, src_url):
     for pf in platforms:
         addr = pf.get(KEYS["address"])
         if addr in IGNORE:
+            pf.setdefault(KEYS["result"], 0)
+            pf[KEYS["channel"]] = []
             continue
         ch_url = src_url + addr
         tasks.append(fetch(session, ch_url))
 
-    # 并发拉频道
     ch_results = await asyncio.gather(*tasks)
-    for pf, ch_data in zip(platforms, ch_results):
+    for pf, ch_data in zip(
+        [p for p in platforms if p.get(KEYS["address"]) not in IGNORE],
+        ch_results
+    ):
         pf[KEYS["channel"]] = ch_data.get(KEYS["channel"], []) if ch_data else []
         pf.setdefault(KEYS["result"], 1 if ch_data else 0)
 
