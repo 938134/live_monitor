@@ -1,3 +1,2 @@
 httpx
 ffmpeg-python
-pypinyin
