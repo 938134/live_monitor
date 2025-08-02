@@ -1,4 +1,4 @@
-name: Split Fetch & Check
+name: 从指定url获取频道列表，并检测
 
 on:
   schedule:
