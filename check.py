@@ -1,28 +1,33 @@
 #!/usr/bin/env python3
 """
-check.py（防呆限时版）
+check.py
+两轮检测：
+1) 轻量级探活：HTTP Range + RTMP 握手
+2) FFmpeg 精筛：仅对第1轮“在线”再测1秒
 """
-import asyncio, httpx, json, logging, time, struct
+import asyncio, httpx, json, logging, time, struct, subprocess
 from pathlib import Path
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s", datefmt="%H:%M:%S")
 log = logging.info
 
-PT_FILE = "pt.json"
-CH_FILE = "ch.json"
-WORKERS = 50          # 并发降到 50
-TOTAL_TIMEOUT = 3.0   # 单条硬性 3 秒
+PT_FILE   = "pt.json"
+CH_FILE   = "ch.json"
+WORKERS   = 50
+TIMEOUT1  = 2.0        # 第1轮超时
+TIMEOUT2  = 1.0        # FFmpeg 精筛超时
+HEADERS   = {"Range": "bytes=0-0", "User-Agent": "Mozilla/5.0"}
 
 def load(p):
     return json.loads(Path(p).read_text(encoding="utf-8")) if Path(p).exists() else []
 
-# ---------- 探活 ----------
+# ---------- 第1轮：轻量级 ----------
 async def probe_http(url: str) -> bool:
     try:
-        async with httpx.AsyncClient(timeout=1.5) as cli:
-            r = await cli.head(url, follow_redirects=True)
+        async with httpx.AsyncClient(timeout=TIMEOUT1) as cli:
+            r = await cli.get(url, follow_redirects=True, headers=HEADERS)
             return r.status_code < 400
-    except Exception as e:
+    except Exception:
         return False
 
 async def probe_rtmp(url: str) -> bool:
@@ -30,7 +35,7 @@ async def probe_rtmp(url: str) -> bool:
         host, *rest = url[7:].split("/", 1)
         host, port = (host.split(":") + ["1935"])[:2]
         reader, writer = await asyncio.wait_for(
-            asyncio.open_connection(host, int(port)), 1.5
+            asyncio.open_connection(host, int(port)), TIMEOUT1
         )
         writer.close()
         await writer.wait_closed()
@@ -38,36 +43,43 @@ async def probe_rtmp(url: str) -> bool:
     except Exception:
         return False
 
-# ---------- 单条检测（带硬性超时） ----------
-async def check_one(channel: dict) -> dict | None:
+async def check_light(channel: dict) -> dict | None:
     url  = channel["address"]
     name = channel.get("title", "unknown")
-
     if url.endswith(".mp4"):
         log("[KEEP] %s | %s", name, url)
         return channel
-
-    try:
-        if url.startswith("rtmp://"):
-            ok = await asyncio.wait_for(probe_rtmp(url), TOTAL_TIMEOUT)
-        else:
-            ok = await asyncio.wait_for(probe_http(url), TOTAL_TIMEOUT)
-    except asyncio.TimeoutError:
-        log("[TIMEOUT] %s | %s", name, url)
-        return None
-    except Exception as e:
-        log("[ERROR] %s | %s | %s", name, url, e)
-        return None
-
+    ok = await (probe_rtmp(url) if url.startswith("rtmp://") else probe_http(url))
     status = "✅" if ok else "❌"
-    log("%s %s | %s", status, name, url)
+    log("%s-1 %s | %s", status, name, url)
     return channel if ok else None
 
-# ---------- 分批并发 ----------
+# ---------- 第2轮：FFmpeg ----------
+async def ff_probe(url: str) -> bool:
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "ffmpeg", "-v", "error", "-i", url, "-t", "1", "-f", "null", "-",
+            stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.DEVNULL
+        )
+        await asyncio.wait_for(proc.wait(), TIMEOUT2)
+        return proc.returncode == 0
+    except Exception:
+        return False
+
+async def check_final(channel: dict) -> dict | None:
+    url  = channel["address"]
+    name = channel.get("title", "unknown")
+    ok   = await asyncio.wait_for(ff_probe(url), TIMEOUT2)
+    status = "✅" if ok else "❌"
+    log("%s-2 %s | %s", status, name, url)
+    return channel if ok else None
+
+# ---------- 主流程 ----------
 async def main():
     start = time.time()
     pt = load(PT_FILE)
 
+    # 1. 取 result=1 并去重
     channels, seen = [], set()
     for src in pt:
         if src.get("result") != 1:
@@ -79,23 +91,21 @@ async def main():
                     seen.add(url)
                     channels.append(ch)
 
+    # 2. 第1轮：轻量级并发
     sem = asyncio.Semaphore(WORKERS)
-    async def safe(ch):
+    async def safe(fn, ch):
         async with sem:
-            return await check_one(ch)
+            return await fn(ch)
 
-    # 分批 500 条，防止协程爆炸
-    batch_size = 500
-    live = []
-    for i in range(0, len(channels), batch_size):
-        batch = channels[i : i + batch_size]
-        tasks = [safe(ch) for ch in batch]
-        results = await asyncio.gather(*tasks)
-        live.extend([r for r in results if r])
-        log("[BATCH] 已处理 %d/%d", min(i + batch_size, len(channels)), len(channels))
+    tasks1 = [safe(check_light, ch) for ch in channels]
+    light_ok = [c for c in await asyncio.gather(*tasks1) if c]
 
-    Path(CH_FILE).write_text(json.dumps(live, ensure_ascii=False, indent=2))
-    log("[SUMMARY] 在线 %d / %d，耗时 %.2fs", len(live), len(channels), time.time() - start)
+    # 3. 第2轮：FFmpeg 精筛
+    tasks2 = [safe(check_final, ch) for ch in light_ok]
+    final_ok = [c for c in await asyncio.gather(*tasks2) if c]
+
+    Path(CH_FILE).write_text(json.dumps(final_ok, ensure_ascii=False, indent=2))
+    log("[SUMMARY] 在线 %d / %d，两轮共耗时 %.2fs", len(final_ok), len(channels), time.time() - start)
 
 if __name__ == "__main__":
     asyncio.run(main())
