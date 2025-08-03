@@ -12,7 +12,7 @@ log = logging.info
 
 PT_FILE   = "pt.json"
 CH_FILE   = "ch.json"
-WORKERS   = 50          # 并发
+WORKERS   = 200         # 并发
 FF_TIMEOUT = 1.0        # ffmpeg 精筛 1 s
 TCP_TIMEOUT = 1.0       # TCP 握手 1 s
 
